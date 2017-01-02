@@ -16,7 +16,7 @@ import de.micromata.opengis.kml.v_2_2_0.Placemark;
 
 public class Crawler {
 	private static final int start = 80948;
-	private static final int numberOfIterations = 100;
+	private static final int numberOfIterations = 200;
 	private static final String url = "http://maps.motorradonline.de/track/kml/";
 	// /**
 	// * ST_GeomFrom_KML(?) -> convert KML-Format into PostGIS-Geometry-Format
@@ -28,7 +28,7 @@ public class Crawler {
 	// */
 	// private String insert_statement = "insert into route (points)
 	// values(ST_Collect((ST_DumpPoints(ST_GeomFromKML(?))).geom))";
-	private String insert_statement = "insert into route (points) values(ST_GeomFromKML(?))";
+	private String insert_statement = "insert into route (ST_DumpPoints(points)) values(ST_GeomFromKML(?))";
 
 	public void processURL(String url) {
 		Connection conn;

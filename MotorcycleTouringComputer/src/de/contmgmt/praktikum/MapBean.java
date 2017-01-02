@@ -13,12 +13,30 @@ import javax.faces.bean.ViewScoped;
 import javax.naming.InitialContext;
 import javax.sql.DataSource;
 
+import org.postgis.LineString;
+import org.postgis.PGgeometry;
+import org.postgis.PGgeometryLW;
+import org.postgresql.util.PGobject;
+
+import de.contmgmt.praktikum.vo.Route;
+
 
 @ManagedBean(name = "MapBean")
 @ViewScoped
 public class MapBean implements Serializable {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 3033537972479491306L;
+	
+	private List<Route> routes;
 	private List<String> geoJsonList;
+	private int radius;
+	private String startPoint;
+	private String endPoint;
+	
 	private InitialContext ctx;
+	
 	
 	@PostConstruct
 	private void init() {
@@ -29,24 +47,26 @@ public class MapBean implements Serializable {
 		
 		Connection conn;
 		geoJsonList = new ArrayList<String>();
+		routes = new ArrayList<>();
 		try {
 			ctx = new InitialContext();
-			DataSource ds = (DataSource) ctx.lookup("java:/PostgresDS");
+			DataSource ds = (DataSource) ctx.lookup("java:/PostgresDS2");
 			conn = ds.getConnection();
-			/*
-			 * Create a statement and execute a select query.
-			 */
+			
 			Statement s = conn.createStatement();
-//			ResultSet r = s.executeQuery("select ST_AsGeoJson(points::geometry) from route");
-			ResultSet r = s.executeQuery("select ST_AsGeoJson(ST_Collect(dp.geom)) from route, ST_DumpPoints(route.points::geometry) as dp limit 10");
+			ResultSet r = s.executeQuery("select id, points::geometry, ST_AsGeoJson(points::geometry) from route limit 50");
+// 			ResultSet r = s.executeQuery("select ST_AsGeoJson(ST_Collect(dp.geom)) from route, ST_DumpPoints(route.points::geometry) as dp limit 10");
+			Route route = null;
 			while (r.next()) {
-				/*
-				 * Retrieve the geometry as an object then cast it to the
-				 * geometry type. Print things out.
-				 */
-				String geom = r.getString(1);
-				geoJsonList.add(geom);
+				route = new Route();
+				
+				route.setId(r.getInt(1));
+				route.setRoute((LineString) PGgeometry.geomFromString(((PGobject) r.getObject(2)).getValue()));;
+				route.setRouteAsGeoJSON(r.getString(3));
+				
+				routes.add(route);
 			}
+			
 			s.close();
 			conn.close();
 		} catch (Exception e) {
@@ -60,5 +80,38 @@ public class MapBean implements Serializable {
 
 	public void setGeoJsonList(List<String> geoJsonList) {
 		this.geoJsonList = geoJsonList;
+	}
+	
+
+	public List<Route> getRoutes() {
+		return routes;
+	}
+
+	public void setRoutes(List<Route> routes) {
+		this.routes = routes;
+	}
+
+	public int getRadius() {
+		return radius;
+	}
+
+	public void setRadius(int radius) {
+		this.radius = radius;
+	}
+
+	public String getStartPoint() {
+		return startPoint;
+	}
+
+	public void setStartPoint(String startPoint) {
+		this.startPoint = startPoint;
+	}
+
+	public String getEndPoint() {
+		return endPoint;
+	}
+
+	public void setEndPoint(String endPoint) {
+		this.endPoint = endPoint;
 	}
 }
