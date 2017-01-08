@@ -18,13 +18,20 @@
 </h:head>
 <h:body>
 	<h:form>
-		<p:gmap id="mymap" widgetVar="mymap" center="50.8029513, 6.42575" zoom="5" type="terrain" style="width:100%;height:800px" />
+		<p:panelGrid layout="grid" columns="2">
+			<p:outputLabel value="Startpunkt" for="startpoint"/>
+			<p:inputText id="startpoint" value="#{MapBean.startPoint}" />
+			
+			<p:outputLabel value="Strecken im Umkreis" for="radius"/>
+			<p:inputText id="radius" value="#{MapBean.radius}" />
+		</p:panelGrid>
+		<p:gmap id="mymap" widgetVar="mymap" center="50.8029513, 6.42575" zoom="5" type="terrain" style="width:100%;height:600px" />
 	</h:form>
 	<script type="text/javascript">
 	function loadGeoData() {
 		var gmap = PF("mymap").getMap();
-		<ui:repeat var="geoJson" value="#{MapBean.geoJsonList}">
-			gmap.data.addGeoJson({"type": "Feature", "geometry": #{geoJson}});
+		<ui:repeat var="route" value="#{MapBean.routes}">
+			gmap.data.addGeoJson({"type": "Feature", "geometry": #{route.routeAsGeoJSON}});
 		</ui:repeat>
 	}
 	</script>
