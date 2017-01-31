@@ -1,39 +1,78 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"
+<h:html xmlns="http://www.w3.org/1999/xhtml"
 	xmlns:h="http://java.sun.com/jsf/html"
 	xmlns:f="http://java.sun.com/jsf/core"
 	xmlns:ui="http://java.sun.com/jsf/facelets"
 	xmlns:p="http://primefaces.org/ui">
 <h:head>
-	<script src="http://maps.google.com/maps/api/js?key=AIzaSyAcGWsRky0gILulRmWRU8CCtOjEZfMZvP8" type="text/javascript"></script>
-	<style>
-	.route1 {
-		stroke: "red"
-	}
-	.route2 {
-		stroke: "blue"
-	}
-	</style>
+	<script
+		src="http://maps.google.com/maps/api/js?key=#{MapBean.GMapsKey}"
+		type="text/javascript"></script>
+		<style>
+		.ui-grid-col-4:FIRST-CHILD { width:25% !important;
+		}
+		
+		.ui-grid-col-4 { width:50% !important;
+		}
+		
+		.ui-grid-col-4:last-CHILD { width:25% !important;
+		}
+		</style>
 </h:head>
 <h:body>
-	<h:form>
-		<p:panelGrid layout="grid" columns="2">
-			<p:outputLabel value="Startpunkt" for="startpoint"/>
-			<p:inputText id="startpoint" value="#{MapBean.startPoint}" />
-			
-			<p:outputLabel value="Strecken im Umkreis" for="radius"/>
-			<p:inputText id="radius" value="#{MapBean.radius}" />
+	<h:form id="mapForm">
+		<p:growl id="growl" showDetail="true" sticky="true" />
+
+		<p:panelGrid columns="3" layout="grid">
+
+			<h:panelGroup id="fields">
+				<p:panelGrid layout="grid" columns="1">
+					<p:outputLabel value="Von" />
+					<p:inputText id="start" value="#{MapBean.start}" style="width:100%" />
+					<p:commandButton value="Setzen"
+						actionListener="#{MapBean.setStartAddress(true)}"
+						onclick="PF('mymap').geocode(document.getElementById('mapForm:start').value);" />
+					<h:panelGroup />
+
+					<p:outputLabel value="Strecken im Umkreis von" for="radius" />
+					<p:inputNumber id="radius" value="#{MapBean.radius}"
+						decimalSeparator="." thousandSeparator="" required="true" />
+					<p:selectOneMenu value="#{MapBean.distanceUnit}">
+						<p:ajax event="change" update="@this" />
+						<f:selectItem itemLabel="km" itemValue="1000" />
+						<f:selectItem itemLabel="Meile(n)" itemValue="1609" />
+					</p:selectOneMenu>
+					<h:panelGroup />
+				</p:panelGrid>
+				<p:commandButton value="Suchen"
+					action="#{MapBean.getRoutesInRadius}"
+					disabled="#{not MapBean.pointSelected}"
+					update="fields #{p:component('mymap')}" />
+				<p:commandButton value="Neuer Rundkurs"
+					action="#{MapBean.createNewRoute}"
+					disabled="#{not MapBean.pointSelected}"
+					update="@form" />
+				<p:commandButton value="Abbrechen" action="#{MapBean.reset}"
+					update="@form" />
+			</h:panelGroup>
+			<p:gmap id="mymap" widgetVar="mymap" navigationControl="true"
+				mapTypeControl="true" zoom="#{MapBean.zoom}" type="terrain"
+				center="#{MapBean.center}" model="#{MapBean.mapModel}"
+				style="width:100%;height:600px">
+				<p:ajax event="geocode" listener="#{MapBean.onGeocode}"
+					update="@this" />
+				<p:ajax event="stateChange" listener="#{MapBean.onStateChange}" />
+				<p:ajax event="pointSelect" listener="#{MapBean.onPointSelect}"
+					update="@form" />
+				<p:ajax event="overlaySelect" listener="#{MapBean.onMarkerSelect}"
+					update="@form" />
+			</p:gmap>
+			<p:dataList value="#{MapBean.selectedAddresses}" var="address"
+				type="ordered">
+				<h:outputText value="#{address}" />
+			</p:dataList>
 		</p:panelGrid>
-		<p:gmap id="mymap" widgetVar="mymap" center="50.8029513, 6.42575" zoom="5" type="terrain" style="width:100%;height:600px" />
 	</h:form>
-	<script type="text/javascript">
-	function loadGeoData() {
-		var gmap = PF("mymap").getMap();
-		<ui:repeat var="route" value="#{MapBean.routes}">
-			gmap.data.addGeoJson({"type": "Feature", "geometry": #{route.routeAsGeoJSON}});
-		</ui:repeat>
-	}
-	</script>
 </h:body>
-</html>
+</h:html>
