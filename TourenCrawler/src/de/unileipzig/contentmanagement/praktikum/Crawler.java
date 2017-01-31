@@ -3,20 +3,25 @@ package de.unileipzig.contentmanagement.praktikum;
 import java.io.StringWriter;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.xml.bind.JAXB;
 
 import org.jsoup.Jsoup;
 
+import de.micromata.opengis.kml.v_2_2_0.Coordinate;
 import de.micromata.opengis.kml.v_2_2_0.Document;
 import de.micromata.opengis.kml.v_2_2_0.Feature;
 import de.micromata.opengis.kml.v_2_2_0.Kml;
 import de.micromata.opengis.kml.v_2_2_0.LineString;
 import de.micromata.opengis.kml.v_2_2_0.Placemark;
+import de.micromata.opengis.kml.v_2_2_0.Point;
 
 public class Crawler {
 	private static final int start = 80948;
-	private static final int numberOfIterations = 200;
+	private static final int numberOfIterations = 100;
 	private static final String url = "http://maps.motorradonline.de/track/kml/";
 	// /**
 	// * ST_GeomFrom_KML(?) -> convert KML-Format into PostGIS-Geometry-Format
@@ -28,39 +33,60 @@ public class Crawler {
 	// */
 	// private String insert_statement = "insert into route (points)
 	// values(ST_Collect((ST_DumpPoints(ST_GeomFromKML(?))).geom))";
-	private String insert_statement = "insert into route (ST_DumpPoints(points)) values(ST_GeomFromKML(?))";
+	private final String return_new_id = " RETURNING id";
+	private final String insert_point = "INSERT INTO points(point) VALUES(ST_GeomFromKML(?))" + return_new_id;
+	private final String insert_route = "INSERT INTO route(description) VALUES(null)" + return_new_id;
+	private final String insert_route_points = "INSERT INTO routepoints(routeid, pointid) VALUES(?, ?)";
 
 	public void processURL(String url) {
 		Connection conn;
 		try {
-			String lineString = null;
+			int pointId = -1;
+			int routeId = -1;
+			List<String> points = new ArrayList<String>();
 
 			String kmlAsString = Jsoup.connect(url).get().outerHtml();
 			Kml kml = Kml.unmarshal(kmlAsString);
-
+			
 			Document doc = (Document) kml.getFeature();
 			for (Feature feature : doc.getFeature()) {
 				if (feature instanceof Placemark) {
 					LineString ls = (LineString) ((Placemark) feature).getGeometry();
-					if (ls.getCoordinates().size() > 0) {
+					for(Coordinate coordinate : ls.getCoordinates()) {
+						Point point = new Point();
+						point.addToCoordinates(coordinate.getLongitude(), coordinate.getLatitude(), coordinate.getAltitude());
 						StringWriter sw = new StringWriter();
-						JAXB.marshal(ls, sw);
-						lineString = sw.toString();
+						JAXB.marshal(point, sw);
+						points.add(sw.toString());
 					}
 				}
 			}
 
-			if (lineString != null) {
+			if (!points.isEmpty()) {
+				ResultSet rs = null;
 				conn = ConnectionFactory.getConnection();
-
-				PreparedStatement statement = conn.prepareStatement(insert_statement);
-				statement.setString(1, lineString);
-
-				statement.executeUpdate();
+				
+				PreparedStatement statement = conn.prepareStatement(insert_route);
+				rs = statement.executeQuery();
+				rs.next();
+				routeId = rs.getInt(1);
+				
+				for(String point : points) {
+					statement = conn.prepareStatement(insert_point);
+					statement.setString(1, point);
+					rs = statement.executeQuery();
+					rs.next();
+					pointId = rs.getInt(1);
+					
+					statement = conn.prepareStatement(insert_route_points);
+					statement.setInt(1, routeId);
+					statement.setInt(2, pointId);
+					statement.execute();
+				}
 			}
 		} catch (Exception ex) {
 			ex.printStackTrace();
-		}
+		} 
 	}
 
 	public static void main(String[] args) {
