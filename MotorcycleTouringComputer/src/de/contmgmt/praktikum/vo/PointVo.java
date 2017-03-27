@@ -11,7 +11,6 @@ public class PointVo {
 	}
 	
 	public PointVo() {
-		// TODO Auto-generated constructor stub
 	}
 
 	public int getId() {

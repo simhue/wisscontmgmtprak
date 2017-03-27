@@ -1,5 +1,6 @@
 package de.contmgmt.praktikum;
 
+import java.io.ByteArrayInputStream;
 import java.io.Serializable;
 import java.sql.CallableStatement;
 import java.sql.Connection;
@@ -9,6 +10,7 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
 import javax.faces.application.FacesMessage;
@@ -25,11 +27,12 @@ import org.postgis.MultiPoint;
 import org.postgis.PGgeometry;
 import org.postgis.Point;
 import org.postgresql.util.PGobject;
-import org.primefaces.context.RequestContext;
 import org.primefaces.event.map.GeocodeEvent;
 import org.primefaces.event.map.OverlaySelectEvent;
 import org.primefaces.event.map.PointSelectEvent;
 import org.primefaces.event.map.StateChangeEvent;
+import org.primefaces.model.DefaultStreamedContent;
+import org.primefaces.model.StreamedContent;
 import org.primefaces.model.map.DefaultMapModel;
 import org.primefaces.model.map.GeocodeResult;
 import org.primefaces.model.map.MapModel;
@@ -82,9 +85,19 @@ public class MapBean implements Serializable {
 	private Marker currentMarker;
 	private Marker firstMarker;
 	private Marker secondMarker;
+	private Polyline selectedPolyline;
+	private StreamedContent kmlFile;
 
-	private String routesInRadius = "SELECT route.id, route.description, points.id, points.point FROM route join routepoints on route.id = routepoints.routeid join points on routepoints.pointid = points.id WHERE ST_DistanceSphere(point, ST_MakePoint(?, ?)) <= ? * ? order by route.id, points.id";
+	//SQL-Queries
+	private final String routesInRadius = "SELECT route.id, route.description, points.id, points.point FROM route join routepoints on route.id = routepoints.routeid join points on routepoints.pointid = points.id WHERE ST_DistanceSphere(point, ST_MakePoint(?, ?)) <= ? * ? order by route.id, points.id";
+	private final String return_new_id = " RETURNING id";
+	private final String insert_point = "INSERT INTO points(point) VALUES(ST_GeomFromEWKT(?))" + return_new_id;
+	private final String insert_route = "INSERT INTO route(description) VALUES(null)" + return_new_id;
+	private final String insert_route_points = "INSERT INTO routepoints(routeid, pointid) VALUES(?, ?)";
 
+	private final double STROKE_OPACITY_PASSIVE = 0.45d;
+	private final double STROKE_OPACITY_SELECTED = 1d;
+	
 	private boolean isManually;
 
 	@PostConstruct
@@ -102,6 +115,8 @@ public class MapBean implements Serializable {
 		routes = new ArrayList<>();
 		snappedRoutes = new ArrayList<>();
 		selectedAddresses = new ArrayList<>();
+		selectedPolyline = null;
+		newRoute = null;
 		startAddress = "";
 		currentMarker = null;
 		clearOverlays();
@@ -118,26 +133,61 @@ public class MapBean implements Serializable {
 		return FacesContext.getCurrentInstance();
 	}
 
-	private RequestContext getRequestContext() {
-		return RequestContext.getCurrentInstance();
+	private Connection getConnection() throws Exception {
+		InitialContext ctx = new InitialContext();
+		DataSource ds = (DataSource) ctx.lookup("java:/PostgresDS");
+		return ds.getConnection();
 	}
-
+	
+	public void saveNewRoute() {
+		Connection conn;
+		try {
+			int newRouteId, newPointId;
+			ResultSet rs = null;
+			conn = getConnection();
+			PreparedStatement statement = conn.prepareStatement(insert_route);
+			rs = statement.executeQuery();
+			rs.next();
+			newRouteId = rs.getInt(1);
+			
+			for(PointVo point : newRoute.getPoints()) {
+				statement = conn.prepareStatement(insert_point);
+				statement.setString(1, point.getPoint().toString());
+				rs = statement.executeQuery();
+				rs.next();
+				newPointId = rs.getInt(1);
+				
+				statement = conn.prepareStatement(insert_route_points);
+				statement.setInt(1, newRouteId);
+				statement.setInt(2, newPointId);
+				statement.execute();
+			}
+			
+			statement.close();
+			conn.close();
+			
+			clearOverlays();
+			mapModel.addOverlay(currentMarker);
+			getRoutesInRadius();
+			mapModel.getPolylines().stream().filter(item -> item.getData().equals(newRouteId + "")).collect(Collectors.toList()).get(0).setStrokeOpacity(STROKE_OPACITY_SELECTED);
+			
+			addInfoMessage("Route gespeichert");
+		} catch(Exception e) {
+			addErrorMessage("Hoppla! Da ist etwas schief gegangen.");
+			e.printStackTrace();
+		}
+	}
+	
 	public void getRoutesInRadius() {
 		routes.clear();
 
 		Connection conn;
 		try {
-			org.primefaces.model.map.LatLng latlng = null;
-			for(Marker marker : mapModel.getMarkers()) {
-				if(marker.getTitle().equals("start")) {
-					latlng = marker.getLatlng();
-					break;
-				}
-			}
+			org.primefaces.model.map.LatLng latlng = mapModel.getMarkers().stream()
+					.filter(item -> item.getTitle().equals("start")).collect(Collectors.toList())
+					.get(0).getLatlng();
 			
-			ctx = new InitialContext();
-			DataSource ds = (DataSource) ctx.lookup("java:/PostgresDS");
-			conn = ds.getConnection();
+			conn = getConnection();
 
 			PreparedStatement s = conn.prepareStatement(routesInRadius);
 			s.setDouble(1, latlng.getLng());
@@ -178,14 +228,12 @@ public class MapBean implements Serializable {
 				Polyline polyline = new Polyline();
 				polyline.setStrokeColor(String.format("#%06X", (0xFFFFFF & colorCode)));
 				polyline.setData(rVo.getId() + "");
-				polyline.setStrokeOpacity(0.45d);
+				polyline.setStrokeOpacity(STROKE_OPACITY_PASSIVE);
 				polyline.setStrokeWeight(3);
 				for (PointVo pVo : rVo.getPoints()) {
 					polyline.getPaths().add(convertPointType(pVo.getPoint(), org.primefaces.model.map.LatLng.class));
 				}
 				mapModel.addOverlay(polyline);
-				// getRequestContext().execute(String.format("PF('mymap').addOverlays(%s)",
-				// new Gson().toJson(polyline)));
 				colorCode += 50;
 			}
 			s.close();
@@ -195,8 +243,6 @@ public class MapBean implements Serializable {
 			e.printStackTrace();
 		}
 
-		// RequestContext context = RequestContext.getCurrentInstance();
-		// context.execute("loadGeoData(" + getRoutesAsGeoJson(routes) + ")");
 		createMarkers();
 	}
 	
@@ -251,9 +297,7 @@ public class MapBean implements Serializable {
 		origin.setSrid(4326);
 		multiPoint.setSrid(4326);
 		try {
-			ctx = new InitialContext();
-			DataSource ds = (DataSource) ctx.lookup("java:/PostgresDS");
-			conn = ds.getConnection();
+			conn = getConnection();
 			// Procedure call.
 			CallableStatement proc = conn.prepareCall("{ ? = call ST_ClosestPoint(ST_GeomFromEWKT(?), ST_GeomFromEWKT(?)) }");
 			proc.registerOutParameter(1, Types.OTHER);
@@ -289,7 +333,6 @@ public class MapBean implements Serializable {
 
 				mapModel.addOverlay(polyline);
 			}
-			//RequestContext.getCurrentInstance().update("mapForm:mymap");
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -430,7 +473,7 @@ public class MapBean implements Serializable {
 	}
 	
 	private void addInfoMessage(String message) {
-		getFacesContext().addMessage(null, new FacesMessage(FacesMessage.SEVERITY_INFO, null, message));
+		getFacesContext().addMessage(null, new FacesMessage(FacesMessage.SEVERITY_INFO, message, ""));
 	}
 	
 	private void addErrorMessage(String message) {
@@ -487,20 +530,63 @@ public class MapBean implements Serializable {
 	}
 
 	public void onMarkerSelect(OverlaySelectEvent ev) {
-		if (ev.getOverlay() != null && ev.getOverlay() instanceof Marker) {
-			selectedAddresses.add(reverseGeocode(convertPointType(((Marker) ev.getOverlay()).getLatlng(), LatLng.class)));
-			if (firstMarker == null) {
-				firstMarker = (Marker) ev.getOverlay();
-			} else {
-				calculateRoute(convertPointType(firstMarker.getLatlng(), LatLng.class), convertPointType(((Marker) ev.getOverlay()).getLatlng(), LatLng.class));
-				firstMarker = null;
-			}
+		if(ev.getOverlay() == null) {return;}
+		
+		if(ev.getOverlay() instanceof Polyline) {
+			selectedPolyline = (Polyline) ev.getOverlay();
+			
+			mapModel.getPolylines().stream()
+			.forEach(item -> item.setStrokeOpacity(STROKE_OPACITY_PASSIVE));
+			
+			mapModel.getPolylines().stream()
+			.filter(item -> item.equals(ev.getOverlay())).collect(Collectors.toList()).get(0)
+			.setStrokeOpacity(STROKE_OPACITY_SELECTED);
+		} else if(ev.getOverlay() instanceof Marker) {
+			//disable manual route selection for now
+//			selectedAddresses.add(reverseGeocode(convertPointType(((Marker) ev.getOverlay()).getLatlng(), LatLng.class)));
+//			if (firstMarker == null) {
+//				firstMarker = (Marker) ev.getOverlay();
+//			} else {
+//				calculateRoute(convertPointType(firstMarker.getLatlng(), LatLng.class), convertPointType(((Marker) ev.getOverlay()).getLatlng(), LatLng.class));
+//				firstMarker = null;
+//			}
 		}
 	}
+	
+	public StreamedContent getKml() {
+		List<Point> points = selectedPolyline.getPaths().stream().map(item -> convertPointType(item, Point.class)).collect(Collectors.toList());
+		LineString ls = new LineString(points.toArray(new Point[points.size()]));
+		ls.setSrid(4326);
+		Connection conn;
+		String result = "";
+		try {
+			conn = getConnection();
+			// Procedure call.
+			CallableStatement proc = conn.prepareCall("{ ? = call ST_AsKML(ST_GeomFromEWKT(?)) }");
+			proc.registerOutParameter(1, Types.VARCHAR);
+			proc.setString(2, ls.toString());
+			proc.execute();
+			result = proc.getString(1);
 
+			proc.close();
+			conn.close();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		result = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><kml xmlns=\"http://www.opengis.net/kml/2.2\"><Document><Placemark>" + result + "</Placemark></Document></kml>";
+		return new DefaultStreamedContent(new ByteArrayInputStream(result.getBytes()), "xml", "tour.kml");
+	}
+	
 	/**
 	 * Getter & Setter
 	 */
+	public boolean isPolylineSelected() {
+		return selectedPolyline != null;
+	}
+	
+	public boolean isNewRoute() {
+		return newRoute != null;
+	}
 
 	public List<RouteVo> getRoutes() {
 		return routes;
