@@ -9,7 +9,8 @@ public class ConnectionFactory {
 	
 	public static Connection getConnection() throws SQLException {
 		if(conn == null) {
-			conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/ContMgmt", "postgres", "postgres");			
+			conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/ContMgmt", "postgres", "postgres");
+			conn.setAutoCommit(false);
 		}
 		return conn;
 	}
