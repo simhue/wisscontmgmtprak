@@ -30,7 +30,7 @@
 			<h:panelGroup id="fields">
 				<p:panelGrid layout="grid" columns="1">
 					<p:outputLabel value="Von" />
-					<p:inputText id="start" value="#{MapBean.start}" style="width:100%" />
+					<p:inputText id="start" value="#{MapBean.start}" style="width:100%" required="true"/>
 					<p:commandButton value="Setzen"
 						actionListener="#{MapBean.setStartAddress(true)}"
 						onclick="PF('mymap').geocode(document.getElementById('mapForm:start').value);" />
@@ -38,7 +38,7 @@
 
 					<p:outputLabel value="Strecken im Umkreis von" for="radius" />
 					<p:inputNumber id="radius" value="#{MapBean.radius}"
-						decimalSeparator="." thousandSeparator="" required="true" />
+						decimalSeparator="," thousandSeparator="" required="true" />
 					<p:selectOneMenu value="#{MapBean.distanceUnit}">
 						<p:ajax event="change" update="@this" />
 						<f:selectItem itemLabel="km" itemValue="1000" />
@@ -54,7 +54,7 @@
 					action="#{MapBean.createNewRoute}"
 					rendered="#{MapBean.pointSelected and fn:length(MapBean.routes) >= 1}"
 					update="@form" />
-				<p:commandButton value="Download"  ajax="false" onclick="PrimeFaces.monitorDownload(start, stop);">
+				<p:commandButton value="Download" rendered="#{MapBean.polylineSelected}" ajax="false" onclick="PrimeFaces.monitorDownload(start, stop);">
 					<p:fileDownload value="#{MapBean.kml}" />
 				</p:commandButton>
 				<p:commandButton value="Abbrechen" action="#{MapBean.reset}"

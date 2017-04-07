@@ -82,19 +82,17 @@ public class MapBean implements Serializable {
 	private MapModel mapModel;
 	private int zoom;
 	private String center;
-	private Marker currentMarker;
-	private Marker firstMarker;
-	private Marker secondMarker;
+	private Marker startMarker;
 	private Polyline selectedPolyline;
-	private StreamedContent kmlFile;
 
 	//SQL-Queries
-	private final String routesInRadius = "SELECT route.id, route.description, points.id, points.point FROM route join routepoints on route.id = routepoints.routeid join points on routepoints.pointid = points.id WHERE ST_DistanceSphere(point, ST_MakePoint(?, ?)) <= ? * ? order by route.id, points.id";
+	private final String routesInRadius = "SELECT route.id, route.description, points.id, points.point FROM route JOIN routepoints ON route.id = routepoints.routeid JOIN points ON routepoints.pointid = points.id WHERE ST_DistanceSphere(point, ST_MakePoint(?, ?)) <= ? * ? ORDER BY route.id, points.id";
 	private final String return_new_id = " RETURNING id";
 	private final String insert_point = "INSERT INTO points(point) VALUES(ST_GeomFromEWKT(?))" + return_new_id;
 	private final String insert_route = "INSERT INTO route(description) VALUES(null)" + return_new_id;
 	private final String insert_route_points = "INSERT INTO routepoints(routeid, pointid) VALUES(?, ?)";
 
+	//Constants
 	private final double STROKE_OPACITY_PASSIVE = 0.45d;
 	private final double STROKE_OPACITY_SELECTED = 1d;
 	
@@ -118,7 +116,7 @@ public class MapBean implements Serializable {
 		selectedPolyline = null;
 		newRoute = null;
 		startAddress = "";
-		currentMarker = null;
+		startMarker = null;
 		clearOverlays();
 	}
 
@@ -126,6 +124,7 @@ public class MapBean implements Serializable {
 		if (mapModel != null) {
 			mapModel.getPolylines().clear();
 			mapModel.getMarkers().clear();
+			selectedPolyline = null;
 		}
 	}
 
@@ -167,7 +166,7 @@ public class MapBean implements Serializable {
 			conn.close();
 			
 			clearOverlays();
-			mapModel.addOverlay(currentMarker);
+			mapModel.addOverlay(startMarker);
 			getRoutesInRadius();
 			mapModel.getPolylines().stream().filter(item -> item.getData().equals(newRouteId + "")).collect(Collectors.toList()).get(0).setStrokeOpacity(STROKE_OPACITY_SELECTED);
 			
@@ -180,7 +179,8 @@ public class MapBean implements Serializable {
 	
 	public void getRoutesInRadius() {
 		routes.clear();
-
+		clearOverlays();
+		mapModel.addOverlay(startMarker);
 		Connection conn;
 		try {
 			org.primefaces.model.map.LatLng latlng = mapModel.getMarkers().stream()
@@ -250,7 +250,7 @@ public class MapBean implements Serializable {
 		if(routes.isEmpty())
 			return;
 		newRoute = new RouteVo();
-		Point start = convertPointType(currentMarker.getLatlng(), Point.class);
+		Point start = convertPointType(startMarker.getLatlng(), Point.class);
 		Point end = start;
 		List<Point> collectedPoints = new ArrayList<>();
 		selectedAddresses.add(reverseGeocode(convertPointType(start, LatLng.class)));
@@ -400,21 +400,25 @@ public class MapBean implements Serializable {
 	}
 
 	private void createMarkers() {
-		if(!isManually) {
+//		if(!isManually) {
 			for (Polyline route : handleEmptyCollection(mapModel.getPolylines())) {
 				 org.primefaces.model.map.LatLng point = route.getPaths().get(0);
 				Marker beginOfRoute = new Marker(convertPointType(point, org.primefaces.model.map.LatLng.class));
 				beginOfRoute.setTitle(route.getId() + "");
+				beginOfRoute.setClickable(false);
+				beginOfRoute.setVisible(false);
 				
 				point = route.getPaths().get(route.getPaths().size() - 1);
 				Marker endOfRoute = new Marker(convertPointType(point, org.primefaces.model.map.LatLng.class));
 				endOfRoute.setTitle(route.getId() + "");
+				endOfRoute.setClickable(false);
+				endOfRoute.setVisible(false);
 				
 				mapModel.addOverlay(beginOfRoute);
 				mapModel.addOverlay(endOfRoute);
 	
 			}
-		}
+//		}
 	}
 
 	private LineString toLineString(List<PointVo> pointVoList) {
@@ -469,7 +473,7 @@ public class MapBean implements Serializable {
 	}
 
 	public boolean isPointSelected() {
-		return currentMarker != null;
+		return startMarker != null;
 	}
 	
 	private void addInfoMessage(String message) {
@@ -517,16 +521,16 @@ public class MapBean implements Serializable {
 	}
 
 	public void onPointSelect(PointSelectEvent ev) {
-		boolean isFirstMarker = currentMarker == null;
-		currentMarker = new Marker(ev.getLatLng());
-		currentMarker.setTitle("start");
+		boolean isFirstMarker = startMarker == null;
+		startMarker = new Marker(ev.getLatLng());
+		startMarker.setTitle("start");
 		mapModel.getMarkers().removeIf(marker -> marker.getTitle().equals("start"));
-		startAddress = reverseGeocode(convertPointType(currentMarker.getLatlng(), LatLng.class));
+		startAddress = reverseGeocode(convertPointType(startMarker.getLatlng(), LatLng.class));
 		selectedAddresses.clear();
 		if (!isFirstMarker) {
 			clearOverlays();
 		}
-		mapModel.addOverlay(currentMarker);
+		mapModel.addOverlay(startMarker);
 	}
 
 	public void onMarkerSelect(OverlaySelectEvent ev) {
