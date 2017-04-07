@@ -59,7 +59,7 @@ public class MapBean implements Serializable {
 	/**
 	 * Constants
 	 */
-	private final String G_MAPS_KEY = "AIzaSyAcGWsRky0gILulRmWRU8CCtOjEZfMZvP8";
+	private final String G_MAPS_KEY = "";
 	private static GeoApiContext geoApiContext;
 
 	private InitialContext ctx;
