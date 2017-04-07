@@ -20,9 +20,7 @@ import javax.faces.context.FacesContext;
 import javax.naming.InitialContext;
 import javax.sql.DataSource;
 
-import org.postgis.Geometry;
 import org.postgis.LineString;
-import org.postgis.MultiLineString;
 import org.postgis.MultiPoint;
 import org.postgis.PGgeometry;
 import org.postgis.Point;
@@ -42,11 +40,9 @@ import org.primefaces.model.map.Polyline;
 import com.google.maps.DirectionsApi;
 import com.google.maps.GeoApiContext;
 import com.google.maps.GeocodingApi;
-import com.google.maps.RoadsApi;
 import com.google.maps.model.DirectionsResult;
 import com.google.maps.model.DirectionsRoute;
 import com.google.maps.model.LatLng;
-import com.google.maps.model.SnappedPoint;
 import com.google.maps.model.TravelMode;
 
 import de.contmgmt.praktikum.vo.PointVo;
@@ -95,8 +91,6 @@ public class MapBean implements Serializable {
 	//Constants
 	private final double STROKE_OPACITY_PASSIVE = 0.45d;
 	private final double STROKE_OPACITY_SELECTED = 1d;
-	
-	private boolean isManually;
 
 	@PostConstruct
 	private void init() {
@@ -138,6 +132,9 @@ public class MapBean implements Serializable {
 		return ds.getConnection();
 	}
 	
+	/**
+	 * store new route in db
+	 */
 	public void saveNewRoute() {
 		Connection conn;
 		try {
@@ -183,6 +180,7 @@ public class MapBean implements Serializable {
 		mapModel.addOverlay(startMarker);
 		Connection conn;
 		try {
+			//make call to db to get all routes in radius
 			org.primefaces.model.map.LatLng latlng = mapModel.getMarkers().stream()
 					.filter(item -> item.getTitle().equals("start")).collect(Collectors.toList())
 					.get(0).getLatlng();
@@ -222,7 +220,8 @@ public class MapBean implements Serializable {
 			if (hasResults) {
 				routes.add(route);
 			}
-
+			
+			//add routes in result set to mapModel
 			Integer colorCode = 0x136aad;
 			for (RouteVo rVo : routes) {
 				Polyline polyline = new Polyline();
@@ -255,16 +254,25 @@ public class MapBean implements Serializable {
 		List<Point> collectedPoints = new ArrayList<>();
 		selectedAddresses.add(reverseGeocode(convertPointType(start, LatLng.class)));
 		
+		//collect all end points
 		for(Marker marker : mapModel.getMarkers()) {
 			collectedPoints.add(convertPointType(marker.getLatlng(), Point.class));
 		}
+		//remove start point the nearest point to the start point would be the start point
 		collectedPoints.remove(start);		
 		
 		Point nextPoint = start, closestPoint = getClosestPoint(start, new MultiPoint(collectedPoints.toArray(new Point[collectedPoints.size()])));
 		collectedPoints.remove(closestPoint);
 		
+		//add end point which is equal to start point
 		collectedPoints.add(end);
 		
+		
+		//get closest point, calculate new route to that point
+		//add route to newRoute
+		//remove start and closest point from collectedPoints
+		//get route including the closest point and add route to newRoute 
+		//set other end of route as new start repeat until end point is found
 		while(true) {
 			selectedAddresses.add(reverseGeocode(convertPointType(closestPoint, LatLng.class)));
 			newRoute.getPoints().addAll(calculateRoute(convertPointType(nextPoint, LatLng.class), convertPointType(closestPoint, LatLng.class)).getPoints());
@@ -291,6 +299,12 @@ public class MapBean implements Serializable {
 //		return route;
 	}
 
+	/**
+	 * get closest point from MultiPoint
+	 * @param origin
+	 * @param multiPoint
+	 * @return
+	 */
 	private Point getClosestPoint(Point origin, MultiPoint multiPoint) {
 		Connection conn;
 		Point result = null;
@@ -314,6 +328,13 @@ public class MapBean implements Serializable {
 		return result;
 	}
 
+	/**
+	 * make call to GMaps API for route calculation
+	 * new Route will be added to mapModel
+	 * @param origin
+	 * @param destination
+	 * @return
+	 */
 	private RouteVo calculateRoute(LatLng origin, LatLng destination) {
 		DirectionsResult result;
 		RouteVo vo = new RouteVo();
@@ -347,27 +368,33 @@ public class MapBean implements Serializable {
 		}
 	}
 	
-	private void snapToRoad(List<PointVo> points) {
-		try {
-			List<LatLng> latLngList = new ArrayList<>();
-			if (points.size() > 100) {
-				return;
-			}
-			points.forEach(x -> latLngList.add(convertPointType(x.getPoint(), LatLng.class)));
-			SnappedPoint[] result = RoadsApi
-					.snapToRoads(geoApiContext, true, latLngList.toArray(new LatLng[latLngList.size()])).await();
-			RouteVo route = new RouteVo();
-			for (int i = 0; i < result.length; i++) {
-				PointVo point = new PointVo();
-				point.setPoint(convertPointType(result[i].location, Point.class));
-				route.getPoints().add(point);
-			}
-			snappedRoutes.add(route);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-	}
+//	private void snapToRoad(List<PointVo> points) {
+//		try {
+//			List<LatLng> latLngList = new ArrayList<>();
+//			if (points.size() > 100) {
+//				return;
+//			}
+//			points.forEach(x -> latLngList.add(convertPointType(x.getPoint(), LatLng.class)));
+//			SnappedPoint[] result = RoadsApi
+//					.snapToRoads(geoApiContext, true, latLngList.toArray(new LatLng[latLngList.size()])).await();
+//			RouteVo route = new RouteVo();
+//			for (int i = 0; i < result.length; i++) {
+//				PointVo point = new PointVo();
+//				point.setPoint(convertPointType(result[i].location, Point.class));
+//				route.getPoints().add(point);
+//			}
+//			snappedRoutes.add(route);
+//		} catch (Exception e) {
+//			e.printStackTrace();
+//		}
+//	}
 
+	/**
+	 * Since here are three types of Points this is necessary to get the needed Point type
+	 * @param point point to convert
+	 * @param clazz need point type
+	 * @return converted point type
+	 */
 	@SuppressWarnings("unchecked")
 	private <T> T convertPointType(Object point, Class<T> clazz) {
 		if (point.getClass() == clazz.getClass()) {
@@ -419,49 +446,6 @@ public class MapBean implements Serializable {
 	
 			}
 //		}
-	}
-
-	private LineString toLineString(List<PointVo> pointVoList) {
-		List<Point> pointList = new ArrayList<>();
-		for (PointVo pointVo : handleEmptyCollection(pointVoList)) {
-			pointList.add(pointVo.getPoint());
-		}
-		return new LineString(pointList.toArray(new Point[pointList.size()]));
-	}
-
-	public String getRoutesAsGeoJson(List<RouteVo> routes) {
-		if (routes.isEmpty())
-			return "";
-
-		List<LineString> lineStringList = new ArrayList<>();
-		for (RouteVo route : routes) {
-			lineStringList.add(toLineString(route.getPoints()));
-			// snapToRoad(route.getPoints());
-		}
-
-		return geomAsGeoJson(new MultiLineString(lineStringList.toArray(new LineString[lineStringList.size()])));
-	}
-
-	private String geomAsGeoJson(Geometry geom) {
-		Connection conn;
-		String geoJson = "";
-		try {
-			ctx = new InitialContext();
-			DataSource ds = (DataSource) ctx.lookup("java:/PostgresDS");
-			conn = ds.getConnection();
-			// Procedure call.
-			CallableStatement proc = conn.prepareCall("{ ? = call ST_AsGeoJson(ST_GeomFromEWKT(?)) }");
-			proc.registerOutParameter(1, Types.VARCHAR);
-			proc.setString(2, geom.toString());
-			proc.execute();
-			geoJson = proc.getString(1);
-
-			proc.close();
-			conn.close();
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		return geoJson;
 	}
 
 	private <E> List<E> handleEmptyCollection(List<E> list) {
@@ -557,6 +541,10 @@ public class MapBean implements Serializable {
 		}
 	}
 	
+	/**
+	 * convert selected route to kml and offer as download
+	 * @return
+	 */
 	public StreamedContent getKml() {
 		List<Point> points = selectedPolyline.getPaths().stream().map(item -> convertPointType(item, Point.class)).collect(Collectors.toList());
 		LineString ls = new LineString(points.toArray(new Point[points.size()]));

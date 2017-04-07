@@ -166,6 +166,10 @@ Der Algorithmus der Routenberechnung nimmt vorher gesetzten Startpunkt als Ausga
 Dem Benutzer werden die neuen Teilsegmente als rote Linien präsentiert (Abb. \ref{fig3}). Ist der Benutzer mit dem Resultat zufrieden, kann er die neue Strecke speichern, anschließend auswählen und als \texttt{KML}-Dokument exportieren.
 
 \section{Fazit und Ausblick}
+\begin{figure}[htb]
+        \centering
+        \includegraphics[width=.75\linewidth]{pics/index.PNG}
+\end{figure}
 Die Webanwendung befindet sich noch im frühen Status der Entwicklung, jedoch bietet die Anwendung eine gute Basis für eine soziale Plattform in der sich Menschen über gemeinsame Touren austauschen können. Die Entwicklung hat gezeigt, dass es möglich ist aufgrund bestehender Routendaten eine neue Strecke berechnen zu lassen. Wegen der prototypischen Implementation des \textit{TourenComputers} wurden nur die Endpunkte einer jeden gefundenen Route im Suchkreis als Zielpunkte für die \textit{GoogleMaps}-Routenberechnung benutzt. Ein Ziel ist es, dass jede Koordinate einer Route als Anker benutzt werden kann. Daraus ergeben sich dann für die weitere Berechnung mehrere Optionen, da der weitere Verlauf der Ankerroute nun in zwei Richtungen weitere gehen kann. Entweder könnte man den Verlauf in beide Richtungen folgen und dem Benutzer mehrere Ergebnisse anbieten oder man nimmt jeweils nur eine Richtung (z.B. die Richtung des kürzen oder längeren Teilstücks).
 
 Auch sollen noch weitere Filteroptionen für die Routenberechnung hinzugefügt werden. So soll der Benutzer zum Beispiel auswählen können, dass nur Strecken im Suchkreis gesucht werden, die eine Mindestbewertung haben oder einem bestimmten Höhenprofil entsprechen. Folglich soll die Anwendung noch um ein Bewertungssystem erweitert werden und das Höhenprofil einer Strecke soll ersichtlich werden.
